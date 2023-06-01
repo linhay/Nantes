@@ -22,26 +22,28 @@ extension NantesLabel {
             lineBreakMode = .byTruncatingTail
         }
 
-        let truncationAttributePosition = attributedString.length - 1
-        if attributedTruncationToken == nil {
-            let truncationTokenString = "\u{2026}" // … unicode
-            let truncationTokenStringAttributes = attributedString.attributes(at: truncationAttributePosition, effectiveRange: nil)
-            attributedTruncationToken = NSAttributedString(string: truncationTokenString, attributes: truncationTokenStringAttributes)
+        self.truncation.isHidden = true
+        self.truncation.range = .init()
+        
+        if !truncation.isEnable {
+            truncation.string = NSAttributedString(string: "\u{2026}",
+                                                   attributes: attributedString.attributes(at: attributedString.length - 1,
+                                                                                           effectiveRange: nil))
         }
 
-        guard let attributedTruncationString = attributedTruncationToken else {
+        guard let truncationString = truncation.string else {
             return lines
         }
 
         // We need a framesetter to draw truncation tokens that have newlines inside them
-        let tokenFramesetter = CTFramesetterCreateWithAttributedString(attributedTruncationString)
-        let tokenFrame = CTFramesetterCreateFrame(tokenFramesetter, CFRange(location: 0, length: attributedTruncationString.length), path, nil)
-        guard let tokenLines = CTFrameGetLines(tokenFrame) as [AnyObject] as? [CTLine] else {
+        let framesetter = CTFramesetterCreateWithAttributedString(truncationString)
+        let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: truncationString.length), path, nil)
+        guard let tokenLines = CTFrameGetLines(frame) as? [CTLine] else {
             return lines
         }
 
         guard tokenLines.count <= lines.count else {
-            print("The truncation token supplied is bigger than the text inside the label, consider a shorter truncation token, otherwise all we're painting here is truncation info")
+            debugPrint("The truncation token supplied is bigger than the text inside the label, consider a shorter truncation token, otherwise all we're painting here is truncation info")
             return lines
         }
 
@@ -57,23 +59,28 @@ extension NantesLabel {
             }
 
             guard 0..<lines.count ~= originalIndex else { continue }
-
-            let originalLine = lines[originalIndex]
-            let originalRange = NSRange(range: CTLineGetStringRange(originalLine))
+            
+            let originalLine   = lines[originalIndex]
+            let originalRange  = NSRange(range: CTLineGetStringRange(originalLine))
             let originalString = NSMutableAttributedString(attributedString: attributedString.attributedSubstring(from: originalRange))
-
-            let truncation = truncationInfo(from: originalRange.location, length: originalRange.length, for: lineBreakMode)
-
+            
+            let truncation = truncationInfo(from: originalRange.location,
+                                            length: originalRange.length,
+                                            for: lineBreakMode)
+            
             let tokenRange = NSRange(range: CTLineGetStringRange(tokenLine))
-            let tokenString = attributedTruncationString.attributedSubstring(from: tokenRange)
+            let tokenString = truncationString.attributedSubstring(from: tokenRange)
             originalString.append(tokenString)
-
             let truncationLine = CTLineCreateWithAttributedString(originalString)
 
             // CTLineCreateTruncatedLine will return nil if the truncation token is wider than the width, so we fallback to using the full truncation token
             let truncatedLine: CTLine = CTLineCreateTruncatedLine(truncationLine, Double(rect.width), truncation.type, tokenLine) ?? tokenLine
 
             lines[originalIndex] = truncatedLine
+            
+            self.truncation.range = NSRange(location: originalRange.location + originalRange.length - tokenRange.length,
+                                            length: tokenRange.length)
+            self.truncation.isHidden = false
         }
 
         return lines

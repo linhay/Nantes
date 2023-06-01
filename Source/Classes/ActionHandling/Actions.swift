@@ -10,78 +10,106 @@ import UIKit
 
 extension NantesLabel {
     override open func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard link(at: point) != nil && isUserInteractionEnabled && !isHidden && alpha > 0.0 else {
+        guard isUserInteractionEnabled,
+              !isHidden,
+              alpha > 0,
+              link(at: point) != nil || truncationToken(at: point) else {
             return super.hitTest(point, with: event)
         }
-
         return self
     }
-
+    
     /// We're handling link touches elsewhere, so we want to do nothing if we end up on a link
     override open func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first,
-            let activeLink = link(at: touch.location(in: self)) else {
-                if labelTappedBlock == nil {
-                    super.touchesBegan(touches, with: event)
-                }
-                return
+        guard let touch = touches.first else {
+            return
         }
-
-        self.activeLink = activeLink
+        
+        let point = touch.location(in: self)
+        
+        self.activeLink = nil
+        self.truncation.tapping = false
+        
+        if truncationToken(at: point),
+           self.truncation.action != nil {
+            self.truncation.tapping = true
+            return
+        }
+        
+        if let activeLink = link(at: point) {
+            self.activeLink = activeLink
+            return
+        }
+        
+        if labelTappedBlock == nil {
+            super.touchesBegan(touches, with: event)
+        }
     }
-
+    
     override open func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard activeLink != nil else {
-            super.touchesCancelled(touches, with: event)
+        if activeLink != nil {
+            activeLink = nil
             return
         }
-
-        activeLink = nil
+        
+        if truncation.tapping {
+            truncation.tapping = false
+            return
+        }
+        super.touchesCancelled(touches, with: event)
     }
-
+    
     override open func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let activeLink = activeLink else {
-            super.touchesEnded(touches, with: event)
-            labelTappedBlock?()
+        if let activeLink = activeLink {
+            handleLinkTapped(activeLink)
             return
         }
-
-        handleLinkTapped(activeLink)
+        
+        if truncation.tapping {
+            truncation.action?()
+            return
+        }
+        
+        super.touchesEnded(touches, with: event)
+        labelTappedBlock?()
     }
-
+    
     override open func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let activeLink = activeLink else {
+        guard let touch = touches.first else {
             super.touchesMoved(touches, with: event)
             return
         }
-
-        guard let touch = touches.first,
-            let link = link(at: touch.location(in: self)) else {
-                return
-        }
-
-        if activeLink != link {
+        let point = touch.location(in: self)
+        
+        if let activeLink = activeLink,
+           let link = link(at: point),
+           activeLink != link {
             self.activeLink = nil
         }
+        
+        if truncation.tapping,
+           !truncationToken(at: point) {
+            self.truncation.tapping = false
+        }
     }
-
+    
     func handleLinkTapped(_ link: NantesLabel.Link) {
         guard link.linkTappedBlock == nil else {
             link.linkTappedBlock?(self, link)
             activeLink = nil
             return
         }
-
+        
         guard let result = link.result else {
             return
         }
-
+        
         activeLink = nil
-
+        
         guard let delegate = delegate else {
             return
         }
-
+        
         switch result.resultType {
         case .address:
             if let address = result.addressComponents {

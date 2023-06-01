@@ -9,10 +9,32 @@
 import UIKit
 
 @IBDesignable open class NantesLabel: UILabel {
+    
     public enum VerticalAlignment {
         case top
         case center
         case bottom
+    }
+    
+    public class Truncation {
+        
+        internal var isHidden: Bool = true
+        internal var isEnable: Bool { string != nil }
+        internal var tapping: Bool  = false
+        internal var range: NSRange = .init(location: 0, length: 0)
+        
+        public var string: NSAttributedString? = nil
+        public var action: (() -> Void)?
+        
+        public init(string: NSAttributedString?, action: (() -> Void)?) {
+            self.string = string
+            self.action = action
+        }
+        
+        public func action(_ action: (() -> Void)?) {
+            self.action = action
+        }
+        
     }
 
     /// NSAttributedString attributes used to style active links
@@ -20,8 +42,13 @@ import UIKit
     open var activeLinkAttributes: [NSAttributedString.Key: Any]?
 
     /// A token to use when the label is truncated in height. Defaults to "\u{2026}" which is "…"
-    open var attributedTruncationToken: NSAttributedString?
+    open var attributedTruncationToken: NSAttributedString? {
+        set { truncation.string = newValue }
+        get { truncation.string }
+    }
 
+    public var truncation = Truncation(string: nil, action: nil)
+    
     /// Handling for touch events after touchesEnded
     /// Warning: Will not be called if `labelTappedBlock` is supplied
     open weak var delegate: NantesLabelDelegate?
@@ -44,7 +71,7 @@ import UIKit
                 NantesLabel.dataDetectorsByType[enabledTextCheckingTypes.rawValue] = detector
                 dataDetector = NantesLabel.dataDetectorsByType[enabledTextCheckingTypes.rawValue]
             } catch {
-                print("Failed to create data detector")
+                debugPrint("Failed to create data detector")
             }
         }
     }

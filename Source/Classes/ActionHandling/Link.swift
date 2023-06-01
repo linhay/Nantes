@@ -117,11 +117,21 @@ extension NantesLabel {
         return nil
     }
 
+    public func truncationToken(at point: CGPoint) -> Bool {
+        guard !truncation.isHidden else {
+            return false
+        }
+        let index = characterIndex(at: point)
+        let value = truncation.range.contains(index)
+        return value
+    }
+    
     /// Tries to find the link at a point
     ///
     /// returns nil if there's no link
     public func link(at point: CGPoint) -> NantesLabel.Link? {
-        guard !linkModels.isEmpty && bounds.inset(by: UIEdgeInsets(top: -15, left: -15, bottom: -15, right: -15)).contains(point) else {
+        guard !linkModels.isEmpty,
+              bounds.inset(by: UIEdgeInsets(top: -15, left: -15, bottom: -15, right: -15)).contains(point) else {
             return nil
         }
 
