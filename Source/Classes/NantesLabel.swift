@@ -16,17 +16,23 @@ import UIKit
         case bottom
     }
     
+    
+    enum TappedEvent {
+        case truncation(Truncation)
+        case link(Link)
+        case tapped(() -> Void)
+    }
+    
     public class Truncation {
         
-        internal var isHidden: Bool = true
-        internal var isEnable: Bool { string != nil }
-        internal var tapping: Bool  = false
-        internal var range: NSRange = .init(location: 0, length: 0)
+        public internal(set) var isHidden: Bool = true
+        public var isEnable: Bool { string != nil }
+        public internal(set) var range: NSRange = .init(location: 0, length: 0)
         
         public var string: NSAttributedString? = nil
         public var action: (() -> Void)?
         
-        public init(string: NSAttributedString?, action: (() -> Void)?) {
+        public init(string: NSAttributedString?, action: (() -> Void)? = nil) {
             self.string = string
             self.action = action
         }
@@ -95,6 +101,7 @@ import UIKit
     /// Floating point number in points; amount to modify default kerning. 0 means kerning is disabled. 0 is the default.
     @IBInspectable open var kern: CGFloat = 0
 
+    var tappedEvent: TappedEvent?
     /// Block to run whenever the label is tapped. Triggered on touchesEnded.
     /// Warning: Will disable calls to `delegate` on taps if this property is set
     open var labelTappedBlock: (() -> Void)?

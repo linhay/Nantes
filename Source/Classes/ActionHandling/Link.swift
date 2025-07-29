@@ -211,73 +211,97 @@ extension NantesLabel {
             }
         }
     }
-
+    
     private func characterIndex(at point: CGPoint) -> Int {
-        guard bounds.contains(point) else {
+        // 1. 快速失败：点必须在 bounds 内
+        guard bounds.contains(point),
+              let attributedText = attributedText,
+              !attributedText.string.isEmpty else {
             return NSNotFound
         }
 
-        let txtRect = textRect(forBounds: bounds, limitedToNumberOfLines: numberOfLines)
-        guard txtRect.contains(point) else {
+        // 2. 计算文本绘制区域
+        let textRect = self.textRect(forBounds: bounds, limitedToNumberOfLines: numberOfLines)
+        guard textRect.contains(point) else {
             return NSNotFound
         }
 
-        guard let framesetter = framesetter,
-            let attributedText = attributedText else {
-                return NSNotFound
+        // 3. 准备 Core Text 对象
+        guard let framesetter = framesetter else {
+            return NSNotFound
         }
 
-        var relativePoint = CGPoint(x: point.x - txtRect.origin.x, y: point.y - txtRect.origin.y)
-        relativePoint = CGPoint(x: relativePoint.x, y: txtRect.size.height - relativePoint.y)
+        // 4. 翻转坐标系（Core Text 原点在左下角）
+        var relativePoint = CGPoint(
+            x: point.x - textRect.origin.x,
+            y: textRect.maxY - point.y      // 注意这里是 maxY - y，确保翻转正确
+        )
 
+        // 5. 创建 CTFrame
         let path = CGMutablePath()
-        path.addRect(txtRect)
-        let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: attributedText.length), path, nil)
+        path.addRect(textRect)
+        let frame = CTFramesetterCreateFrame(
+            framesetter,
+            CFRange(location: 0, length: attributedText.length),
+            path,
+            nil
+        )
 
-        guard let lines = CTFrameGetLines(frame) as [AnyObject] as? [CTLine] else {
+        // 6. 获取行信息
+        guard let lines = CTFrameGetLines(frame) as? [CTLine],
+              !lines.isEmpty else {
             return NSNotFound
         }
 
         let lineCount = numberOfLines > 0 ? min(numberOfLines, lines.count) : lines.count
-        guard lineCount > 0 else {
-            return NSNotFound
-        }
-
-        var index = NSNotFound
-        var lineOrigins: [CGPoint] = .init(repeating: .zero, count: lineCount)
+        var lineOrigins = [CGPoint](repeating: .zero, count: lineCount)
         CTFrameGetLineOrigins(frame, CFRange(location: 0, length: lineCount), &lineOrigins)
 
-        for lineIndex in 0..<lineOrigins.count {
-            var lineOrigin = lineOrigins[lineIndex]
-            let line = lines[lineIndex]
-            var ascent: CGFloat = 0.0
-            var descent: CGFloat = 0.0
-            var leading: CGFloat = 0.0
+        // 7. 遍历行查找点击位置
+        for (index, line) in lines.prefix(lineCount).enumerated() {
+            let lineOrigin = lineOrigins[index]
 
+            // 获取行排版信息
+            var ascent: CGFloat = 0
+            var descent: CGFloat = 0
+            var leading: CGFloat = 0
             let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
-            let yMin = floor(lineOrigin.y - descent)
-            let yMax = ceil(lineOrigin.y + ascent)
 
-            let penOffset = CGFloat(CTLineGetPenOffsetForFlush(line, flushFactor, Double(txtRect.width)))
-            lineOrigin.x = penOffset
+            // 计算行区域
+            let yMin = lineOrigin.y - descent
+            let yMax = lineOrigin.y + ascent
 
-            // if we've already passed the point, stop
-            guard relativePoint.y <= yMax else {
-                break
-            }
+            // 横向对齐偏移（如居中对齐）
+            let flushFactor = textAlignment == .center ? 0.5 :
+                              textAlignment == .right  ? 1.0 : 0.0
+            let penOffset = CGFloat(CTLineGetPenOffsetForFlush(line, flushFactor, Double(textRect.width)))
+            let lineLeft = lineOrigin.x + penOffset
+            let lineRight = lineLeft + width
 
+            // 检查 y 和 x 是否在行内
             guard relativePoint.y >= yMin,
-                relativePoint.x >= lineOrigin.x && relativePoint.x <= lineOrigin.x + width else {
-                    continue
+                  relativePoint.y <= yMax,
+                  relativePoint.x >= lineLeft,
+                  relativePoint.x <= lineRight else {
+                continue
             }
 
-            let position = CGPoint(x: relativePoint.x - lineOrigin.x, y: relativePoint.y - lineOrigin.y)
-            index = CTLineGetStringIndexForPosition(line, position)
-            break
+            // 计算字符索引
+            let position = CGPoint(x: relativePoint.x - lineLeft, y: relativePoint.y - lineOrigin.y)
+            let charIndex = CTLineGetStringIndexForPosition(line, position)
+
+            // 确保索引有效
+            guard charIndex != NSNotFound,
+                  charIndex < attributedText.length else {
+                return NSNotFound
+            }
+
+            return charIndex
         }
 
-        return index
+        return NSNotFound
     }
+
 }
 
 extension NSAttributedString {
